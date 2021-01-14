@@ -177,34 +177,42 @@ if (( $SYSTEM_VERSION_ID < 80 ))
 then
     sed -i 's/\(GRUB_CMDLINE_LINUX.*\)"$/\1/g' /etc/default/grub
     if [ "$VIOMMU" == "NO" ]; then
-        sed -i "s/GRUB_CMDLINE_LINUX.*/& default_hugepagesz=1G hugepagesz=1G nohz=on nohz_full=$ISOLCPUS rcu_nocbs=$ISOLCPUS tuned.non_isolcpus=00000001 intel_pstate=disable nosoftlockup\"/g" /etc/default/grub
+        sed -i "s/GRUB_CMDLINE_LINUX.*/& mitigations=off default_hugepagesz=1G hugepagesz=1G nohz=on nohz_full=$ISOLCPUS rcu_nocbs=$ISOLCPUS tuned.non_isolcpus=00000001 intel_pstate=disable nosoftlockup\"/g" /etc/default/grub
     elif [ "$VIOMMU" == "YES" ]; then
-        sed -i "s/GRUB_CMDLINE_LINUX.*/& default_hugepagesz=1G hugepagesz=1G intel_iommu=on iommu=pt nohz=on nohz_full=$ISOLCPUS rcu_nocbs=$ISOLCPUS tuned.non_isolcpus=00000001 intel_pstate=disable nosoftlockup\"/g" /etc/default/grub
+        sed -i "s/GRUB_CMDLINE_LINUX.*/& mitigations=off default_hugepagesz=1G hugepagesz=1G intel_iommu=on iommu=pt nohz=on nohz_full=$ISOLCPUS rcu_nocbs=$ISOLCPUS tuned.non_isolcpus=00000001 intel_pstate=disable nosoftlockup\"/g" /etc/default/grub
     fi
 
 
     echo -e "isolated_cores=$ISOLCPUS" >> /etc/tuned/cpu-partitioning-variables.conf
+    echo -e "isolate_managed_irq=Y" >> /etc/tuned/cpu-partitioning-variables.conf
     sed -i "s/GRUB_TERMINAL=\"serial console\"/GRUB_TERMINAL=\"console\"/" /etc/default/grub
     grub2-mkconfig -o /boot/grub2/grub.cfg
     systemctl start tuned
     sleep 10
     tuned-adm profile cpu-partitioning
+    systemctl stop irqbalance.service
+    chkconfig irqbalance off
+    /usr/sbin/swapoff -a
 else
     # to save the old options, and remove
     kernelopts=$(grub2-editenv - list | grep kernelopts | cut -d '=' -f2-)
     # append
     if [ "$VIOMMU" == "NO" ]; then
         #grub2-editenv - set kernelopts="$kernelopts default_hugepagesz=1G hugepagesz=1G nohz=on nohz_full=$ISOLCPUS rcu_nocbs=$ISOLCPUS tuned.non_isolcpus=00000001 intel_pstate=disable nosoftlockup"
-        grub2-editenv - set kernelopts="$kernelopts isolcpus=$ISOLCPUS default_hugepagesz=1G hugepagesz=1G hugepages=2"
+        grub2-editenv - set kernelopts="$kernelopts mitigations=off isolcpus=$ISOLCPUS default_hugepagesz=1G hugepagesz=1G hugepages=2"
 	#sed -i "s/GRUB_CMDLINE_LINUX.*/& default_hugepagesz=1G hugepagesz=1G nohz=on nohz_full=$ISOLCPUS rcu_nocbs=$ISOLCPUS tuned.non_isolcpus=00000001 intel_pstate=disable nosoftlockup\"/g" /etc/default/grub
     elif [ "$VIOMMU" == "YES" ]; then
-        grub2-editenv - set kernelopts="$kernelopts default_hugepagesz=1G hugepagesz=1G intel_iommu=on iommu=pt nohz=on nohz_full=$ISOLCPUS rcu_nocbs=$ISOLCPUS tuned.non_isolcpus=00000001 intel_pstate=disable nosoftlockup"
+        grub2-editenv - set kernelopts="$kernelopts mitigations=off default_hugepagesz=1G hugepagesz=1G intel_iommu=on iommu=pt nohz=on nohz_full=$ISOLCPUS rcu_nocbs=$ISOLCPUS tuned.non_isolcpus=00000001 intel_pstate=disable nosoftlockup"
         #sed -i "s/GRUB_CMDLINE_LINUX.*/& default_hugepagesz=1G hugepagesz=1G intel_iommu=on nohz=on nohz_full=$ISOLCPUS rcu_nocbs=$ISOLCPUS tuned.non_isolcpus=00000001 intel_pstate=disable nosoftlockup\"/g" /etc/default/grub
     fi
     systemctl start tuned
     sleep 10
     echo -e "isolated_cores=$ISOLCPUS" >> /etc/tuned/cpu-partitioning-variables.conf
+    echo -e "isolate_managed_irq=Y" >> /etc/tuned/cpu-partitioning-variables.conf
     tuned-adm profile cpu-partitioning
+    systemctl stop irqbalance.service
+    chkconfig irqbalance off
+    /usr/sbin/swapoff -a
     #grub2-editenv - set kernelopts="$kernelopts iommu=on iommu=pt default_hugepagesz=1GB hugepagesz=1G hugepages=16"
     # to check
     #cat /boot/grub2/grubenv for Legacy BIOS or ppc64 systems
